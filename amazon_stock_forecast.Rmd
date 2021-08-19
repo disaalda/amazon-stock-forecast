@@ -1,0 +1,665 @@
+---
+title: "Amazon Stock Price Forecast"
+author: "Disa Alda Naomi, Huy Phan Hoang, Joshua Michael"
+date: "April 24, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+## I. Introduction
+
+Amazon stock has gained a reputation of becoming a "fast-rising" or "fast-growing" stock throughout the years. Not only that, Amazon has become a household name for online shopping and its business fundamentals and uncommon strategy has continued to allow the company to prosper. Amazon's success is reflected in its stock price as Amazon's stock has rocketed from $34 a share in 2007 to $1,448.59. (Marcial, 2018). Many experts and critics argue wheter or not Amazon is able to sustain its immensely fast growth in the future. 
+
+This project aims to model the trajectory of Amazon stock price, using monthly data from 1997 to 2018, and forecast its movement in the upcoming years; whether this upward movement is likely to continue or not. 
+
+## II. Results 
+
+## 1. Modeling and Forecasting Trend
+
+```{r setup, include=FALSE}
+library(quantmod)
+library(plyr)
+library(forecast)
+library(tseries)
+library(timeSeries)
+```
+
+# A). Time-series plot
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+#Get Historical Adjusted Closing Stock Data
+amzn_adjclose <- get.hist.quote('AMZN', quote = "AdjClose", compression = "m",retclass="ts")
+
+
+#Combine the list of Dates and Interpolated Data
+Data <- data.frame(amzn_adjclose)
+Data <- na.omit(Data)
+
+#Create the Time-Series of the Interpolated Data, and the Sequence of Time
+Data_ts <- ts(Data$Adjusted, start=c(1997,5), freq=12)
+Time_ts <- seq(1997+5/12, by=1/12, length=length(Data_ts))
+
+#Plot the Time-Series
+plot(Data_ts,main="Amazon Stock Price", ylab="Stock Price in USD",xlab="Year")
+```
+
+# B). The existence of covariance stationary
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+#Transform the time series into Difference of Log time series
+logts <- log(Data_ts)
+difflogts <- diff(logts)
+plot.ts(difflogts, main="Difference of Log Transform of Amazon Stock Price",ylab="Log Returns",xlab="Year")
+```
+The difference of log transform of Amazon stock price shows decreasing amplitude throughout time, which implies that the process is not covariance stationary. The amplitude is higher at the beginning of the period sample, which makes sense as it implies higher volatility at the beginning where Amazon just went public. However, the process stabilizes and the oscillations display more stable amplitudes i.e. better support for covariance stationarity towards the end of the data.
+
+# C). The ACF and PACF of the data
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+acf(Data_ts,main="ACF of Price")
+pacf(Data_ts,main="PACF of Price")
+```
+
+The ACF graph shows strong, smooth time dependence up to second lag variable and drops to zero after lag 2. The PACF graph shows spike at 0 lag variable and decays to zero almost immediately. The stronger correlation in ACF as compared to PACF suggests stronger short-term dynamics.
+
+
+# D). Fitting a linear and nonlinear model to the time series.
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+#Create different models ... Plot the original Price Time-Series then Modeled Time-Series to compare
+
+par(mfrow=c(1,2))
+
+#Linear Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price") #Plot the original Time-Series Plot
+
+linear=lm(Data_ts ~ Time_ts)
+plot(Data_ts,main="Linear Fit",ylab="Price", xlab="Year", lwd=2, col='blue')
+
+lines(Time_ts,linear$fit,col="red",lwd=2) #Plot the Linear Fit
+
+#Quadratic Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price")
+
+quad=lm(Data_ts~ Time_ts +I (Time_ts^2))
+plot(Data_ts,main="Quadratic Fit",ylab="Price", xlab="Year", lwd=2, col='blue')
+lines(Time_ts,quad$fit,col="red",lwd=2)
+
+#Log Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price")
+
+log=lm(log(Data_ts) ~ Time_ts)  
+plot(log(Data_ts),main="Log Fit",ylab="Log Price", xlab="Year", lwd=2, col='blue')
+lines(Time_ts,log$fit,col="red",lwd=2)
+
+#Log-Quadratic Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price")
+
+logquad=lm(log(Data_ts)~ Time_ts + I(Time_ts^2))
+plot(log(Data_ts),main="Log-Quadratic Fit",xlab="Year", ylab="Log Price",col="blue",lwd=2)
+lines(Time_ts,logquad$fit,col="red",lwd=2)
+
+#Log-Quadratic-Period Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price")
+
+sin.time_ts<-sin(2*pi*Time_ts)
+cos.time_ts<-cos(2*pi*Time_ts)
+logquadper=lm(log(Data_ts) ~ Time_ts + I(Time_ts^2) + sin.time_ts + cos.time_ts)
+plot(log(Data_ts),xlab="Year",col="blue",lwd=2, ylab="Log Price",main="Log-Quadratic-Periodic Fit")
+lines(Time_ts, logquadper$fit,col="red",lwd=2)
+```
+
+# E). Residuals vs fitted values
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+#Plot all Fit vs Residual for the models above
+par(mfrow=c(1,1))
+plot(linear$fit,linear$res, pch=20,col="blue",lwd=1,xlab="Fit",ylab="Residual",main="Linear Fit vs Residual")
+abline(h=0,lwd=1,col = "red")
+```
+
+The plot displays a pattern (kind of resembling an exponential function from the middle towards the end of the fitted values) - the points do not appear to be random. The lower and higher fitted values seem to be positive residuals, which means our model might underestimate the fitted values at these points and the values at the middle seem to have negative residuals, which means our model might overestimate the predicted values here.
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+plot(quad$fit,quad$res, pch=20,col="blue",lwd=1,xlab="Fit",ylab="Residual",main="Quadratic Fit vs Residual")
+abline(h=0,lwd=1,col = "red")
+```
+
+The residuals scatter plot above does not seem random, most of the fitted values lie below the horizontal line at zero which means that most of the fitted values (especially fitted values in the middle-range) are overpredicted. The points tend to increase at the end of the sample, which might imply the existence of heteroskedacity as the residual increases away from zero and the model continues to underpredict the fitted values.
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+plot(log$fit,log$res, pch=20,col="blue",lwd=1,xlab="Fit",ylab="Residual",main="Log Fit vs Residual")
+abline(h=0,lwd=1,col = "red")
+```
+
+The residual plot displays a periodic, kind of sinusoidal pattern with decreasing amplitude. The points clearly do not seem random, but we observe that the distance from zero of points of residual scatter plot tend to decrease and so our model gets progressively better at predicting the fitted values in comparison to actual data points. 
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+plot(logquad$fit,logquad$res, pch=20,col="blue",lwd=1,xlab="Fit",ylab="Residual",main="Log-Quadratic Fit vs Residual")
+abline(h=0,lwd=1,col = "red")
+```
+
+The residual plot above is similar to the residual plot of Logarithmic fit, but this plot seems to show smaller amplitudes and the points are clustered closer to the horizontal line at zero. Again, we see a kind of dampened, sinusoidal pattern that kind of converges to the horizontal line at zero. The points do not seem random but again we see that the model gets progressively better in predicting the fitted values. 
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+plot(logquadper$fit,logquadper$res, pch=20,col="blue",lwd=1,xlab="Fit",ylab="Residual",main="Log-Quadratic-Periodic Fit vs Residual")
+abline(h=0,lwd=1,col = "red")
+```
+
+The residual plot above is similar to the residual plots of Log-Quadratic Fit and the Log Fit as seen previously. The residuals display a dampened sinusoidal pattern, that seem to converge to the horizontal line at zero. The residuals get more tightly clustered around zero and we eventually have little problem with overprediction/underprediction as the model gets better in predicting the fitted values, as seen by the smaller magnitudes of the residual 
+
+In general, the residual vs. fitted values plot of the logarithmic models seem to suggest greater volatility at lower fitted values, that is when stock price is lower there tends to be greater magnitude of residuals. This agrees with our observation when the stock price is lower at the earlier periods of our data (1970-2010). As the time series shows, as time passes by, stock price increases and stock price movement stabilizes, its volatility relatively decreases and the plots above confirm such dynamics. Also, there might be seasonality factors that we have not accounted for that might explain the pattern in the residuals. The pattern of the residuals kind of hint periodic patterns 
+
+# F). Histogram of the residuals
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+hist(linear$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Linear Residuals")
+
+hist(quad$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Quadratic Residuals")
+
+hist(log$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Log Residuals")
+
+hist(logquad$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Log-Quadratic Residuals")
+
+hist(logquadper$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Log-Quadratic-Periodic Residuals")
+
+# FURTHER INSPECTION OF THE RESIDUALS ON OUR CHOSEN MODEL 
+qqnorm(logquad$res,col="skyblue4", main="QQ Normal Plot")
+qqline(logquad$res, col=2)
+jarque.bera.test(logquad$res)
+
+# Skewnes
+skewness(logquad$res)
+kurtosis(logquad$res)
+```
+
+The histogram of residuals for Linear and Quadratic models are clearly not normal as it is significantly right-skewed and not symmetric. This strongly suggests non-normality of our residuals. The histogram of residuals for log regressions show stronger symmetry, its shape roughly resembles normal distribution, which is what we want to have.
+
+The QQ normal plot is tighly fitted around the red line for most of the observations, except for points that depart from the QQ line at the lower end and higher end of the sample. This might mean the model does not fit as well for data at the lowest and highest ends of our sample. 
+
+The Jarque Bera Test reveals that we should reject the null hypothesis that the residuals are normally distributed, so we conclude that the residuals are not normally distributed. This confirms our discussion of the residual vs. fitted values plot. 
+
+# G). Associated diagnostic statistics (R-squared, t-distribution, F-distribution, etc.)
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+summary(linear)
+```
+The variables are individually statistically significant at 1% significance level as indicated by the results of T-test, and the model is also statistically significant at 5% significance levelas indicated by results of the F-Test. The Adjusted R-squared is okay at 0.581.
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+summary(quad)
+```
+The variables are all statistically significant at 1% significance level as indicated by the T-test, and the model is statistically significant at 5% significance levelas indicated by the F-test results. The adjusted R-squared is significantly higher than the linear model at 0.8678.
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+summary(log)
+```
+
+Each of the variables are all statistically significant at 1% significance level as indicated byt he T-test, and the model is statistically significant at 5% significance level as indicated by the low p-value from the F-test. However, the model has lower adjusted R-squared than the poynomial model.
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+summary(logquad)
+```
+
+The independent variables are all statistically significant at 1% significance level, and the model is statistically significant at 5% significance level as indicated by the low p-value from the F-test. The model has relatively high adjusted R-squared, but it is slightly lower than the adjusted R-squared of the polynomial model. 
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+summary(logquadper)
+```
+
+The intercept, the linear and quadratic independent variables inside the Log-Quadratic-Periodic fit are statistically significant at 1% significance level, however the sin and cosine of time are not statistically significant. The model is statistically significant at 5% significance level as the low p-value of the F-test shows. The Adjusted R-squared is relatively high too, but slightly lower than the Log-Quadratic fit as we introduce new trigonometric independent variables to the model - which shouldn't be necessary to include since they are not statistically significant. 
+
+
+# H). Select a trend model using AIC and one using BIC.
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+AIC(linear,quad,log,logquad,logquadper)
+BIC(linear,quad,log,logquad,logquadper)
+```
+
+Using AIC, we choose Log Quadratic model since it has the lowest AIC value. Using BIC, we observe that Log Quadratic Model also has the lowest BIC value. The selected models from both agree with each other. 
+
+We proceed to choose Log Quadratic model for our forecast as they have the lowest AIC and BIC values, in addition to our discussion of its diagnostic statistics and residual plots.
+
+# I). h-steps forecast
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+TimeFrame=data.frame(Time_ts=seq(2018+4/12,2039+3/12, by=1/12))
+
+#Create Prediction and Confidence Interval of Log-Quadratic Model
+pred.plim = predict(logquad,TimeFrame,level=0.95, interval="prediction")
+pred.clim = predict(logquad,TimeFrame,level=0.95, interval="confidence")
+
+#Plot the Prediction
+par(mfrow=c(1,1))
+
+#Overview Forecast
+matplot(TimeFrame$Time_ts,cbind(pred.clim, pred.plim[,-1]),
+        lty=c(6,1,1,3,3), type="l", lwd=2, ylab="Predicted Log Price",xlab="Year",main="Overview Forecast of Price",xlim=c(1997,2030),ylim=c(1,14))
+legend("topleft", legend=c("Prediction Interval Upper Limit", "Prediction Interval Lower Limit", "Confidence Interval Upper Limit", "Confidence Interval Lower Limit", "Forecast"), col=c("cyan", "blue", "green", "red", "black"), lty=c(3,3,1,1,1), cex=0.6)
+matlines(Time_ts, log(Data_ts), lwd=2)
+matlines(Time_ts, logquad$fitted.values, col="blue",lwd=2)
+abline(a = NULL, b = NULL, v = 2018+4/12)
+
+#Zoomed Forecast
+matplot(TimeFrame$Time_ts,cbind(pred.clim, pred.plim[,-1]),
+        lty=c(6,1,1,3,3), type="l", lwd=2, ylab="Predicted Log Price",xlab="Year",main="Zoomed Forecast of Price",xlim=c(2018.4,2036),ylim=c(5.5,17))
+legend("topleft", legend=c("Prediction Interval Upper Limit", "Prediction Interval Lower Limit", "Confidence Interval Upper Limit", "Confidence Interval Lower Limit", "Forecast"), col=c("cyan", "blue", "green", "red", "black"), lty=c(3,3,1,1,1), cex=0.6)
+matlines(Time_ts, log(Data_ts), lwd=2)
+matlines(Time_ts, logquad$fitted.values, col="blue",lwd=2)
+```
+
+Our forecast follows the upward trend of Amazon Stock Price. As expected, the prediction interval is wider than the confidence interval. However, we can observe that the length of the confidence interval increases as the forecast is further away from the end of our estimation sample.
+
+#2. Modeling and Forecasting Seasonality 
+
+# A). Construct and test a model with a full set of seasonal dummies
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+#Create Dummy Variable
+Season_minusLast <- seasonaldummy(Data_ts)
+
+#Because seasonaldummy() omitted the last season ... must readd the last season
+#Create a new Matrix with repeating "1" every 4th row ... then delete the first row to match data
+Dec <- matrix(data=rep(c(rep(0,11),1)),nrow=256,ncol=1)
+Dec <- Dec[-c(1:4),]
+
+#Bind the Matrixes together ... it will turn into a Dataframe so turn it back into Matrix
+SeasonalDummy <- data.frame(cbind(Season_minusLast,Dec))
+SeasonalDummy <- data.matrix(SeasonalDummy)
+
+#Pure Season Dummy Model 
+season=tslm(log(Data_ts) ~ SeasonalDummy)
+
+#Plot Revenue with Pure Season Dummy Model
+plot(log(Data_ts),main="Time Series Data: Seasonality",lwd=2)
+lines(season$fitted.values, col="red",lwd=2)
+
+#Zoom on Seasonality
+plot(season$fitted,ylim=c(4,4.9),xlim=c(2000,2003),main="Zoomed Seasonality")
+
+summary(season)
+```
+
+Visually, the plot shows that there are seasonality with Amazon stocks, but the seasonality is small. Additionally, the seasonality is not aligned with the data because the trend is not accounted for.
+
+The model with seasonal dummies have an intercept statistically significant at 5% significance level, and the seasonal dummy variables are not statistically signficant. The  R-squared is very close to zero and the model is not statistically significant as indicated by the very low F-statistic. This might be due to the fact that we are only regressing the price against seasonal dummies as the independent variables and we do not include the time independent variables, and so this model does not explain much of the variation.
+
+
+# B). Estimated seasonal factors
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+seasonal_factor=tslm(log(Data_ts) ~ SeasonalDummy + 0)
+
+#Plot the Coefficient of each Quarter to get how much each Quarter affect Revenue
+plot(seasonal_factor$coef,type='l',ylab='Seasonal Factors', xlab="Season",lwd=2, main="Plot of Seasonal Factors")
+
+```
+
+The plot of seasonal factors show that there is a peak at the fourth season variable (fourth month of the year), a dip in the fifth month of the year and another peak - although not as high as the first peak - at the eleventh month. 
+
+Another explanation for this seasonality pattern is the "Sell In May and Go Away" effect of stocks. Also known as the Halloween Indicator, stockholders have historically believed that selling stock in May and buying back stock in November can help avoid the volatility. This might be an explanation for the seasonal factor of Amazon stocks.
+
+# C). Full Model (including residuals vs fitted values)
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+#Log-Quadratic Model + Seasonality
+logquad_Seasonal <- tslm(log(Data_ts)~ Time_ts + I(Time_ts^2) + SeasonalDummy)
+
+#Plot Model + Seasonality
+plot(log(Data_ts),main="Time Series Data: Seasonality + Log-Quad Model",xlab="Year",lwd=2)
+lines(logquad_Seasonal$fitted.values, col="red", lwd=2)
+
+#Make same Model using lm instead of tslm in order to create plot for Fit vs Residual
+logquad_Seasonal_2 <- lm(log(Data_ts) ~ Time_ts + I(Time_ts^2) + SeasonalDummy)
+par(mfrow=c(1,1))
+plot(logquad_Seasonal_2$fit,logquad_Seasonal_2$res, pch=20,col="blue",lwd=1,ylab="Residual",main="Log-Quadratic Fit vs Residual")
+abline(h=0,lwd=2,col = "red")
+
+hist(logquad_Seasonal$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Log-Quadratic Residuals")
+
+# FURTHER INSPECTION ON RESIDUALS 
+qqnorm(logquad_Seasonal$res,col="skyblue4", main="QQ Normal Plot")
+qqline(logquad_Seasonal$res, col=2)
+jarque.bera.test(logquad_Seasonal$res)
+skewness(logquad_Seasonal$res)
+kurtosis(logquad_Seasonal$res)
+```
+
+The seasonality with trend now follows the data more closely than the seasonality alone. However, the model is still not perfect because it is not accounting for all the fluctuations in the data. 
+
+Like the trend fit vs residual plot, the seasonality with trend fit vs residual plot is evidently not random. There is indication that the model is progressively getting better at predicting the data as the residuals tended towards 0.
+
+The histogram of the residuals also look similar to those in part I - symmetric around zero but not exactly like the Normal distribution. From this we can infer that since accounting for the seasonality does not improve our residuals, the pattern might be explained by cycles. 
+
+We see that the outcome of Jarque-Bera Test for normality rejects the null that the residuals follow a normal distribution, which agrees with the graph of residuals vs. fitted values above. 
+
+# D). Summary statistics
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+summary(logquad_Seasonal)
+```
+
+The summary shows that the Time-Series variables are statistically significant at 1%. Again, the seasonal dummy variables are not statistically significant at 5% significance level. However, our degrees of freedom are well above fifty, so we might as well include the dummy variables for more intuitive interpretation of our model i.e. to tease out any seasonal factors. Looking at the coefficients for each season, there is a major downward (or negative) trend between May and November, which agrees with the October Indicator theory. The F-statistic shows that the model is statistically significant at 5% significance level. The Multiple R Squared is slightly higher than the model without seasonality factors, however, the Adjusted R-Squared is lower than the Log-Quadratic Model without seasonality by a very slight amount, which might be due to the fact that we are adding the statistically insignificant dummy variables. However, since our degrees of freedom are well above fifty and the decrease in Adjusted R-squared is very little, we do not compensate for the possibility overfitting our model by adding the seasonal dummy variables. 
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+accuracy(logquad_Seasonal)
+accuracy(logquad)
+accuracy(logquadper)
+accuracy(log)
+```
+
+Comparing our full model with the other log models, we can see that our Log Quadratic Model with Seasonality factored in has the lowest RMSE, although the models have similar RMSE values. We would prefer our mdoel to have low RMSE since we would want small magnitude of standard deviation of the residuals in general. The model also has relatively low values for other error metrics though not necessarily the lowest, but the difference is very slight that we can conclude that the chosen model does not do much worse than the other logarithmic models. 
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+kappa(logquad_Seasonal)
+kappa(logquad)
+kappa(logquadper)
+kappa(log)
+```
+
+The Kappa statistic is a measure of agreement between the predictions and actual labels - it compares the overall accuracy to the expected random chance accuracy - the higher the Kappa, the better. The results show that Log Quadratic with Seasonality Factors have the highest Kappa and thus best accuracy in comparison with the other log models.
+
+# E). Prediction andd Confidence Interval for Seasonality
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+#Using the same Time Frame from Trend Forecast, create the Prediction and Confidence Interval for Seasonal
+spred.plim = predict(logquad_Seasonal,TimeFrame,level=0.95, interval="prediction")
+spred.clim = predict(logquad_Seasonal,TimeFrame,level=0.95, interval="confidence")
+
+#Plot the Prediction ... Overview Forecast
+matplot(TimeFrame$Time_ts,cbind(spred.clim, spred.plim[,-1]),
+        lty=c(6,1,1,3,3), type="l", lwd=2, ylab="Predicted Log Price",xlab="Year",xlim=c(1997,2030),ylim=c(0,15),main="Overview Forecast of Season + Log-Quad Model")
+legend("topleft", legend=c("Prediction Interval Upper Limit", "Prediction Interval Lower Limit", "Confidence Interval Upper Limit", "Confidence Interval Lower Limit", "Forecast"), col=c("cyan", "blue", "green", "red", "black"), lty=c(3,3,1,1,1), cex=0.6)
+matlines(Time_ts, log(Data_ts), lwd=2)
+matlines(Time_ts, logquad_Seasonal$fitted.values, col="blue",lwd=2)
+abline(a = NULL, b = NULL, v = 2018+4/12)
+
+#Zoomed Forecast
+matplot(TimeFrame$Time_ts,cbind(spred.clim, spred.plim[,-1]),
+        lty=c(6,1,1,3,3), type="l", lwd=2, ylab="Predicted Log Price",xlab="Year",xlim=c(2017,2040),ylim=c(5.5,19),main="Zoomed Forecast of Season + Log-Quad Model")
+legend("topleft", legend=c("Prediction Interval Upper Limit", "Prediction Interval Lower Limit", "Confidence Interval Upper Limit", "Confidence Interval Lower Limit", "Forecast"), col=c("cyan", "blue", "green", "red", "black"), lty=c(3,3,1,1,1), cex=0.6)
+matlines(Time_ts, log(Data_ts), lwd=2)
+matlines(Time_ts, logquad_Seasonal$fitted.values, col="blue",lwd=2)
+```
+
+The forecast for seasonality and trend model is nearly identical to the forecast for only the trend model. However, with seasonality, the confidence interval and predicted value lines fluctuate due to the seasonality. The confidence interval is still diverging the further it is away from our sample data.
+
+## III. Conclusions and Future Work
+
+Based on the forecasts from our Log Quadratic Model with and without the seasonality factor, we see that the stock price for Amazon is projected to undergo an upward trend in upcoming years, as it has in the past. Our forecast projects the trend to grow/increase at the same rate as our Log Quadratic model, but the realization of future Amazon stock prices may grow slower or faster as indicated by the confidence intervals. 
+
+Our data includes monthly data from 1997 to 2018, and we  may want to consider the more recent subset of our data as we are more concerned with the recent history of Amazon, which we expect would be reflected more apparently in the present day stock price. Including all of the existing data of Amazon stock price also means that we are looking at higher-volatility periods during Amazon's early days, which might display different business climate than the company now. In other words, the data generating process, or the economic machine
+
+In the future, we might want to incorporate analysis of the revenue of the company to further gauge the seasonality factor. We might also consider modelling the returns of Amazon's stock to tease out the same factors and to try to transform the process into weakly stationary and covariance stationary processes. 
+
+In addition, we might want to consider fitting Moving Average/AutoRegressive models on the data for Amazon stock price. Looking back at the PACF of the time series of our data, we may conclude that AR(1) process would be a good candidate to model Amazon stock prices. We might also utilize the auto.ARIMA function to work backwards on fitting our data.
+
+## IV. References 
+
+???Computing Classification Evaluation Metrics in R.??? Revolutions, blog.revolutionanalytics.com/2016/03/com_class_eval_metrics_r.html.
+
+Gonz??lez-Rivera Gloria. Forecasting for Economics and Business. Routledge, 2016.
+
+???Machine Learning Evaluation Metrics in R.??? Machine Learning Mastery, 22 Sept. 2016, machinelearningmastery.com/machine-learning-evaluation-metrics-in-r/.
+
+Marcial, Gene. ???Are Fast-Rising Amazon Shares Still A Buy???? Forbes, Forbes Magazine, 23 Feb. 2018, www.forbes.com/sites/genemarcial/2018/02/23/is-fast-rising-stockof-amazon-still-a-buy/.
+
+https://stackexchange.com/
+https://stackoverflow.com/
+
+## V. R Source Code 
+
+```{r eval=FALSE}
+
+#Setup
+setwd("C:/Users/Huy/Documents/R")
+rm(list=ls(all=TRUE))
+
+#Library
+library(quantmod)
+library(plyr)
+library(forecast)
+library(tseries)
+library(timeSeries)
+
+#Get Historical Adjusted Closing Stock Data
+amzn_adjclose <- get.hist.quote('AMZN', quote = "AdjClose", compression = "m",retclass="ts")
+
+
+#Combine the list of Dates and Interpolated Data
+Data <- data.frame(amzn_adjclose)
+Data <- na.omit(Data)
+
+#Create the Time-Series of the Interpolated Data, and the Sequence of Time
+Data_ts <- ts(Data$Adjusted, start=c(1997,5), freq=12)
+Time_ts <- seq(1997+5/12, by=1/12, length=length(Data_ts))
+
+#--------------------------------------------------------------------------------------------------------------
+
+#Problem 1 A).
+
+#Plot the Time-Series
+plot(Data_ts,main="Amazon Stock Price")
+
+#--------------------------------------------------------------------------------------------------------------
+
+#Problem 1 B).
+
+#Transform the Time-Series into a Difference of Log Time-Series
+logts <- log(Data_ts) #Get the Log of the Time-Series
+difflogts <- diff(logts) #Get the Lagged Difference
+plot(difflogts, main="Difference of Log Transform of Amazon Stock Price")
+
+#--------------------------------------------------------------------------------------------------------------
+
+#Problem 1 C).
+
+#Create the ACF and PACF of the Data Time-Series
+acf(Data_ts,main="ACF of Price")
+pacf(Data_ts,main="PACF of Price")
+
+#--------------------------------------------------------------------------------------------------------------
+
+#Problem 1 D).
+
+#Create different models ... Plot the original Price Time-Series then Modeled Time-Series to compare
+
+par(mfrow=c(1,2)) #Set the following plots to be in a 1x2 Grid
+
+#Linear Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price") #Plot the original Time-Series Plot
+
+linear=lm(Data_ts ~ Time_ts) #Create the Linear Model
+plot(Data_ts,main="Linear Fit",ylab="Price", xlab="Year", lwd=2, col='blue')
+
+lines(Time_ts,linear$fit,col="red",lwd=2) #Plot the Linear Fit
+
+#Quadratic Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price")
+
+quad=lm(Data_ts~ Time_ts +I (Time_ts^2))
+plot(Data_ts,main="Quadratic Fit",ylab="Price", xlab="Year", lwd=2, col='blue')
+lines(Time_ts,quad$fit,col="red",lwd=2)
+
+#Log Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price")
+
+log=lm(log(Data_ts) ~ Time_ts)  
+plot(log(Data_ts),main="Log Fit",ylab="Log Price", xlab="Year", lwd=2, col='blue')
+lines(Time_ts,log$fit,col="red",lwd=2)
+
+#Log-Quadratic Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price")
+
+logquad=lm(log(Data_ts)~ Time_ts + I(Time_ts^2))
+plot(log(Data_ts),main="Log-Quadratic Fit",xlab="Year", ylab="Log Price",col="blue",lwd=2)
+lines(Time_ts,logquad$fit,col="red",lwd=2)
+
+#Log-Quadratic-Period Fit
+plot(Data_ts,main="Time-Series Plot",xlab="Year", ylab="Price")
+
+sin.time_ts<-sin(2*pi*Time_ts) #Create new variables sin and cos to be used in periodic model
+cos.time_ts<-cos(2*pi*Time_ts)
+logquadper=lm(log(Data_ts) ~ Time_ts + I(Time_ts^2) + sin.time_ts + cos.time_ts)
+plot(log(Data_ts),xlab="Year",col="blue",lwd=2, ylab="Log Price",main="Log-Quadratic-Periodic Fit")
+lines(Time_ts, logquadper$fit,col="red",lwd=2)
+
+#--------------------------------------------------------------------------------------------------------------
+
+#Problem 1 E).
+
+#Plot all Fit vs Residual for the models above
+par(mfrow=c(1,1)) #Set grid back to a 1x1
+
+plot(linear$fit,linear$res, pch=20,col="blue",lwd=1,xlab="Fit",ylab="Residual",main="Linear Fit vs Residual")
+abline(h=0,lwd=1,col = "red") #Create a straight horizontal line at Y=0
+
+#--------------------------------------------------------------------------------------------------------------
+
+#Problem 1 F).
+
+#Create histograms of the models
+hist(linear$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Linear Residuals")
+
+hist(quad$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Quadratic Residuals")
+
+hist(log$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Log Residuals")
+
+hist(logquad$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Log-Quadratic Residuals")
+
+hist(logquadper$res,10,col="blue",xlab="Residuals",ylab="Fraction",main="Log-Quadratic-Periodic Residuals")
+
+#Test the Log-Quadratic Model using skewness, kurtosis, QQ Plot, and the Jarque-Bera Test
+skewness(logquad$res)
+kurtosis(logquad$res)
+qqnorm(logquad$res,col="skyblue4", main="QQ Normal Plot")
+qqline(logquad$res, col=2)
+jarque.bera.test(logquad$res)
+
+#--------------------------------------------------------------------------------------------------------------
+
+#1 G).
+
+#Create a summary of each model
+summary(linear)
+summary(quad)
+summary(log)
+summary(logquad)
+summary(logquadper)
+
+#--------------------------------------------------------------------------------------------------------------
+
+#1 H).
+
+#Generate the list of BIC and AIC for each model
+AIC(linear,quad,log,logquad,logquadper)
+BIC(linear,quad,log,logquad,logquadper)
+
+#--------------------------------------------------------------------------------------------------------------
+
+#1 I).
+
+TimeFrame=data.frame(Time_ts=seq(2018+4/12,2039+3/12, by=1/12)) #Create the time frame for the prediction
+
+#Create Prediction and Confidence Interval of Log-Quadratic Model
+pred.plim = predict(logquad,TimeFrame,level=0.95, interval="prediction") #create a variable for the prediction
+pred.clim = predict(logquad,TimeFrame,level=0.95, interval="confidence") #create the variables for the confidence interval
+
+#Plot the Prediction
+par(mfrow=c(1,1))
+
+#Use matplot to plot the forecast
+matplot(TimeFrame$Time_ts,cbind(pred.clim, pred.plim[,-1]),
+        lty=c(6,1,1,3,3), type="l", lwd=2, ylab="Predicted Log Price",xlab="Year",main="Overview Forecast of Price",xlim=c(1997,2030),ylim=c(1,14)) 
+
+#Create a legend of the matplot
+legend("topleft", legend=c("Prediction Interval Upper Limit", "Prediction Interval Lower Limit", "Confidence Interval Upper Limit", "Confidence Interval Lower Limit", "Forecast"), col=c("cyan", "blue", "green", "red", "black"), lty=c(3,3,1,1,1), cex=0.6)
+
+#Add the previous data to compare with the forecast
+matlines(Time_ts, log(Data_ts), lwd=2)
+matlines(Time_ts, logquad$fitted.values, col="blue",lwd=2)
+abline(a = NULL, b = NULL, v = 2018+4/12) #create a vertical line at 2018 April to show where the forecast begins
+
+#Same as above, but reduced the xlim and ylim in order to get a closer look at the forecast
+matplot(TimeFrame$Time_ts,cbind(pred.clim, pred.plim[,-1]),
+        lty=c(6,1,1,3,3), type="l", lwd=2, ylab="Predicted Log Price",xlab="Year",main="Zoomed Forecast of Price",xlim=c(2018.4,2036),ylim=c(5.5,17))
+legend("topleft", legend=c("Prediction Interval Upper Limit", "Prediction Interval Lower Limit", "Confidence Interval Upper Limit", "Confidence Interval Lower Limit", "Forecast"), col=c("cyan", "blue", "green", "red", "black"), lty=c(3,3,1,1,1), cex=0.6)
+matlines(Time_ts, log(Data_ts), lwd=2)
+matlines(Time_ts, logquad$fitted.values, col="blue",lwd=2)
+abline(a = NULL, b = NULL, v = 2018.304)
+
+#--------------------------------------------------------------------------------------------------------------
+
+#2 A).
+
+#Create Dummy Variable
+Season_minusLast <- seasonaldummy(Data_ts)
+
+#Because seasonaldummy() omitted the last season ... must readd the last season
+#Create a new Matrix with repeating "1" every 12th row ... then delete the first 4 rows to match data because the data starts in May
+Dec <- matrix(data=rep(c(rep(0,11),1)),nrow=256,ncol=1)
+Dec <- Dec[-c(1:4),]
+
+#Bind the Matrixes together ... it will turn into a Dataframe so turn it back into Matrix
+SeasonalDummy <- data.frame(cbind(Season_minusLast,Dec))
+SeasonalDummy <- data.matrix(SeasonalDummy)
+
+#Pure Season Dummy Model 
+season=tslm(log(Data_ts) ~ SeasonalDummy)
+
+#Plot Revenue with Pure Season Dummy Model
+plot(log(Data_ts),main="Time Series Data: Seasonality",lwd=2)
+lines(season$fitted.values, col="red",lwd=2)
+
+#Zoom on Seasonality
+plot(season$fitted,ylim=c(4,4.9),xlim=c(2000,2003),main="Zoomed Seasonality")
+
+#Summary of the Pure Season Dummy Model
+summary(season)
+
+#--------------------------------------------------------------------------------------------------------------
+
+#2 B).
+
+#Create the seasonal factor model, add the + 0 because the data would be inverted otherwise
+seasonal_factor=tslm(log(Data_ts) ~ SeasonalDummy + 0)
+
+#Plot the Coefficient of each Quarter to get how much each Quarter affect Revenue
+plot(seasonal_factor$coef,type='l',ylab='Seasonal Factors', xlab="Season",lwd=2, main="Plot of Seasonal Factors")
+
+#--------------------------------------------------------------------------------------------------------------
+
+#2 C).
+
+#Log-Quadratic Model + Seasonality
+logquad_Seasonal <- tslm(log(Data_ts)~ Time_ts + I(Time_ts^2) + SeasonalDummy)
+
+#Plot Model + Seasonality
+plot(log(Data_ts),main="Time Series Data: Seasonality + Log-Quad Model",lwd=2)
+lines(logquad_Seasonal$fitted.values, col="red", lwd=2)
+
+#Make same Model using lm instead of tslm in order to create plot for Fit vs Residual
+logquad_Seasonal_2 <- lm(log(Data_ts) ~ Time_ts + I(Time_ts^2) + SeasonalDummy)
+par(mfrow=c(1,1))
+plot(logquad_Seasonal_2$fit,logquad_Seasonal_2$res, pch=20,col="blue",lwd=1,ylab="Residual",main="Log-Quadratic Fit vs Residual")
+abline(h=0,lwd=2,col = "red") #Create horizontal line at Y=0
+#--------------------------------------------------------------------------------------------------------------
+
+#Summarize and use Accuracy on the new full model
+summary(logquad_Seasonal)
+accuracy(logquad_Seasonal)
+
+#--------------------------------------------------------------------------------------------------------------
+
+#The same Time Frame from the Trend Model will be used
+
+#Create Prediction and Confidence Interval of Log-Quadratic Model
+spred.plim = predict(logquad_Seasonal,TimeFrame,level=0.95, interval="prediction")
+
+spred.clim = predict(logquad_Seasonal,TimeFrame,level=0.95, interval="confidence") 
+
+#Plot the Prediction ... Overview Forecast
+matplot(TimeFrame$Time_ts,cbind(spred.clim, spred.plim[,-1]),
+        lty=c(6,1,1,3,3), type="l", lwd=2, ylab="Predicted Log Price",xlab="Year",xlim=c(1997,2030),ylim=c(0,15),main="Overview Forecast of Season + Log-Quad Model")
+legend("topleft", legend=c("Prediction Interval Upper Limit", "Prediction Interval Lower Limit", "Confidence Interval Upper Limit", "Confidence Interval Lower Limit", "Forecast"), col=c("cyan", "blue", "green", "red", "black"), lty=c(3,3,1,1,1), cex=0.6)
+matlines(Time_ts, log(Data_ts), lwd=2)
+matlines(Time_ts, logquad_Seasonal$fitted.values, col="blue",lwd=2)
+abline(a = NULL, b = NULL, v = 2018+4/12)
+
+#Zoomed Forecast
+matplot(TimeFrame$Time_ts,cbind(spred.clim, spred.plim[,-1]),
+        lty=c(6,1,1,3,3), type="l", lwd=2, ylab="Predicted Log Price",xlab="Year",xlim=c(2017,2040),ylim=c(5.5,19),main="Zoomed Forecast of Season + Log-Quad Model")
+legend("topleft", legend=c("Prediction Interval Upper Limit", "Prediction Interval Lower Limit", "Confidence Interval Upper Limit", "Confidence Interval Lower Limit", "Forecast"), col=c("cyan", "blue", "green", "red", "black"), lty=c(3,3,1,1,1), cex=0.6)
+matlines(Time_ts, log(Data_ts), lwd=2)
+matlines(Time_ts, logquad_Seasonal$fitted.values, col="blue",lwd=2)
+abline(a = NULL, b = NULL, v = 2018+4/12)
+```
+
+
